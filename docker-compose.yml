@@ -1,0 +1,17 @@
+version: "3.9"
+
+services:
+  tracker-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: tracker-app
+
+    ports:
+      - "3000:3000"
+
+    env_file:
+      - .env
+
+    restart: unless-stopped

@@ -1,36 +1,26 @@
-# 1️⃣ Use official Node.js LTS image
+# Base image
 FROM node:20-alpine AS base
-
-# 2️⃣ Set working directory
 WORKDIR /app
 
-# 3️⃣ Copy package files first (for better build caching)
-COPY package.json yarn.lock* package-lock.json* ./
+# Install dependencies only when needed
+FROM base AS deps
+COPY package.json package-lock.json yarn.lock* ./
+RUN if [ -f yarn.lock ]; then yarn install --frozen-lockfile; else npm install; fi
 
-# 4️⃣ Install dependencies
-# Use yarn if yarn.lock exists, otherwise use npm
-RUN if [ -f yarn.lock ]; then yarn install --frozen-lockfile; \
-    else npm install --legacy-peer-deps; fi
-
-# 5️⃣ Copy rest of the project
+# Build the app
+FROM base AS builder
 COPY . .
-
-# 6️⃣ Build the Next.js app
+COPY --from=deps /app/node_modules ./node_modules
 RUN npm run build || yarn build
 
-# 7️⃣ Use a lightweight Node image for production
-FROM node:20-alpine AS production
-
+# Production image
+FROM base AS runner
 WORKDIR /app
 
-# Copy only necessary files from builder
-COPY --from=base /app ./
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./package.json
 
-# Expose Next.js default port
 EXPOSE 3000
-
-# Set NODE_ENV to production
-ENV NODE_ENV=production
-
-# Start the Next.js app
 CMD ["npm", "start"]

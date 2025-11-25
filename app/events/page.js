@@ -13,7 +13,7 @@ import { useRouter } from 'next/navigation'
 import { Search, Filter, Calendar, Plus, Users, DollarSign, Grid, Sparkles } from 'lucide-react'
 import { isToday, isTomorrow, isPast, isThisWeek, isThisMonth } from 'date-fns'
 import toast from 'react-hot-toast'
-import { deleteDoc, doc, updateDoc, collection, onSnapshot, query, where, addDoc, arrayUnion } from 'firebase/firestore'
+import { deleteDoc, doc, updateDoc, collection, onSnapshot, query, where, addDoc, arrayUnion, getDocs } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { EditEventModal } from '@/components/EditEventModal'
 import { ViewEventModal } from '@/components/ViewEventModal'
@@ -43,30 +43,84 @@ export default function EventsPage() {
   }, [user, loading, router])
 
   useEffect(() => {
+    // wait until auth finished
+    if (loading) return
     if (!user) return
-    const eventsCollection = collection(db, 'events')
-    let q = eventsCollection
-    if (user.role !== 'admin') {
-      q = query(eventsCollection, where('isPublic', '==', true))
-    }
 
+    const eventsCollection = collection(db, 'events')
+
+    // onSnapshot with logging so we can see whether realtime listener fires
     const unsubscribe = onSnapshot(
-      q,
+      eventsCollection,
       (snapshot) => {
-        const fetchedEvents = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }))
-        setEvents(fetchedEvents)
+        console.log('onSnapshot fired, docs:', snapshot.size)
+        const fetchedEvents = snapshot.docs.map(d => ({ id: d.id, ...d.data() }))
+
+        if (user.role !== 'admin') {
+          const visible = fetchedEvents.filter(ev => {
+            // If an event is explicitly private, only allow creator or registered users
+            const explicitlyPrivate = ev.isPublic === false || ev.isPrivate === true
+
+            // helper: handle registeredUsers as array of objects or uids
+            const isRegistered = Array.isArray(ev.registeredUsers) && ev.registeredUsers.some(u =>
+              typeof u === 'string' ? u === user.uid : (u && u.uid) === user.uid
+            )
+
+            if (explicitlyPrivate) {
+              if (ev.createdBy === user.uid) return true
+              if (isRegistered) return true
+              return false
+            }
+
+            // otherwise show event (treat missing isPublic as public)
+            return true
+          })
+          setEvents(visible)
+        } else {
+          setEvents(fetchedEvents)
+        }
       },
       (error) => {
-        console.error('Error fetching events:', error)
+        console.error('onSnapshot error fetching events:', error)
         toast.error('Failed to load events: ' + error.message)
       }
     )
 
-    return () => unsubscribe()
-  }, [user])
+    // fallback: if onSnapshot doesn't deliver within 2s, do a one-time getDocs
+    const fallbackTimer = setTimeout(async () => {
+      try {
+        console.warn('onSnapshot fallback: performing getDocs')
+        const qSnap = await getDocs(eventsCollection)
+        console.log('getDocs returned docs:', qSnap.size)
+        const fetchedEvents = qSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+        if (user.role !== 'admin') {
+          const visible = fetchedEvents.filter(ev => {
+            const explicitlyPrivate = ev.isPublic === false || ev.isPrivate === true
+            const isRegistered = Array.isArray(ev.registeredUsers) && ev.registeredUsers.some(u =>
+              typeof u === 'string' ? u === user.uid : (u && u.uid) === user.uid
+            )
+
+            if (explicitlyPrivate) {
+              if (ev.createdBy === user.uid) return true
+              if (isRegistered) return true
+              return false
+            }
+            return true
+          })
+          setEvents(visible)
+        } else {
+          setEvents(fetchedEvents)
+        }
+      } catch (err) {
+        console.error('getDocs fallback error:', err)
+      }
+    }, 2000)
+
+    return () => {
+      clearTimeout(fallbackTimer)
+      unsubscribe()
+    }
+  }, [user, loading])
 
   useEffect(() => {
     let filtered = events
