@@ -17,10 +17,10 @@ RUN npm run build || yarn build
 FROM base AS runner
 WORKDIR /app
 
-# ONLY copy public folder if it exists
-COPY --from=builder /app/public ./public 2>/dev/null || true
+# REMOVE public copy – because your project has no public folder
+# COPY --from=builder /app/public ./public
 
-# Copy necessary build output
+# Copy build output
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
