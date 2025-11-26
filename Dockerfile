@@ -17,10 +17,14 @@ RUN npm run build || yarn build
 FROM base AS runner
 WORKDIR /app
 
-COPY --from=builder /app/public ./public
+# ONLY copy public folder if it exists
+COPY --from=builder /app/public ./public 2>/dev/null || true
+
+# Copy necessary build output
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 
 EXPOSE 3000
+
 CMD ["npm", "start"]
