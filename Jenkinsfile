@@ -136,7 +136,7 @@ spec:
                 container('dind') {
                     sh '''
                         echo "Logging in to Nexus Docker Registry..."
-                        docker login nexus.imcc.com:8082 \
+                        docker login nexus.imcc.com \
                           -u student -p Imcc@2025
                     '''
                 }
