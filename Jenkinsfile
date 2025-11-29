@@ -51,7 +51,7 @@ spec:
 
     environment {
         SONAR_HOST = "http://my-sonarqube-sonarqube.sonarqube.svc.cluster.local:9000"
-        SONAR_AUTH = "sqa_e08b602dbc2c698393d18db662756e60b91639e7"
+        SONAR_AUTH = "sqp_f76073617cf71453b8ee311f9e0ca5fbdcf693c4"
     }
 
     stages {
