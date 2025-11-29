@@ -199,7 +199,6 @@
 // }
 
 
-
 pipeline {
     agent {
         kubernetes {
@@ -259,10 +258,28 @@ spec:
 
         NEXUS_HOST = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
         NEXUS_REPO = "2401078"
+        NAMESPACE = "2401078"
     }
 
     stages {
 
+        /* -------------------------
+           CREATE NAMESPACE IF NOT EXISTS
+        ------------------------- */
+        stage('Create Namespace') {
+            steps {
+                container('kubectl') {
+                    sh '''
+                        echo "Checking namespace ${NAMESPACE}..."
+                        kubectl get namespace ${NAMESPACE} || kubectl create namespace ${NAMESPACE}
+                    '''
+                }
+            }
+        }
+
+        /* -------------------------
+           CLEAN OLD DOCKERFILES
+        ------------------------- */
         stage('Clean Old Workspace Dockerfile') {
             steps {
                 container('node') {
@@ -274,12 +291,18 @@ spec:
             }
         }
 
+        /* -------------------------
+           CHECKOUT SOURCE CODE
+        ------------------------- */
         stage('Checkout') {
             steps {
                 git url:'https://github.com/Prathmesh-Joshi/tracker.git', branch:'main'
             }
         }
 
+        /* -------------------------
+           PREPARE PROJECT
+        ------------------------- */
         stage('Prepare Project') {
             steps {
                 container('node') {
@@ -288,17 +311,24 @@ spec:
             }
         }
 
+        /* -------------------------
+           BUILD DOCKER IMAGE
+        ------------------------- */
         stage('Build Docker Image') {
             steps {
                 container('dind') {
                     sh '''
                         sleep 10
+                        echo "Building Docker Image..."
                         docker build -t tracker:latest .
                     '''
                 }
             }
         }
 
+        /* -------------------------
+           SONAR SCAN
+        ------------------------- */
         stage('SonarQube Analysis') {
             steps {
                 container('sonar-scanner') {
@@ -313,19 +343,23 @@ spec:
             }
         }
 
+        /* -------------------------
+           NEXUS LOGIN
+        ------------------------- */
         stage('Login to Nexus Registry') {
             steps {
                 container('dind') {
                     sh '''
-                        echo "Logging in to INTERNAL Nexus (HTTP ONLY)..."
-                        docker login ${NEXUS_HOST} \
-                          -u student \
-                          -p Imcc@2025
+                        echo "Logging in to INTERNAL Nexus..."
+                        docker login ${NEXUS_HOST} -u student -p Imcc@2025
                     '''
                 }
             }
         }
 
+        /* -------------------------
+           PUSH IMAGE
+        ------------------------- */
         stage('Push Tracker Image to Nexus') {
             steps {
                 container('dind') {
@@ -333,31 +367,40 @@ spec:
                         echo "Tagging Tracker image..."
                         docker tag tracker:latest ${NEXUS_HOST}/${NEXUS_REPO}/tracker:v1
 
-                        echo "Pushing Tracker image to Nexus..."
+                        echo "Pushing Tracker image..."
                         docker push ${NEXUS_HOST}/${NEXUS_REPO}/tracker:v1
                     '''
                 }
             }
         }
 
+        /* -------------------------
+           KUBERNETES DEPLOYMENT
+        ------------------------- */
         stage('Deploy to Kubernetes') {
             steps {
                 container('kubectl') {
                     sh '''
-                        kubectl apply -f k8s/deployment.yaml -n 2401078
-                        kubectl apply -f k8s/service.yaml -n 2401078
-                        kubectl rollout status deployment/tracker-frontend-deployment -n 2401078 --timeout=120s
+                        echo "Applying Deployment and Service..."
+                        kubectl apply -f k8s/deployment.yaml -n ${NAMESPACE}
+                        kubectl apply -f k8s/service.yaml -n ${NAMESPACE}
+
+                        echo "===== Rollout Status ====="
+                        kubectl rollout status deployment/tracker -n ${NAMESPACE} --timeout=120s
                     '''
                 }
             }
         }
 
+        /* -------------------------
+           DEBUG PODS
+        ------------------------- */
         stage('Debug Pods') {
             steps {
                 container('kubectl') {
                     sh '''
-                        kubectl get pods -n 2401078
-                        kubectl describe pods -n 2401078 | head -n 200
+                        kubectl get pods -n ${NAMESPACE}
+                        kubectl describe pods -n ${NAMESPACE} | head -n 200
                     '''
                 }
             }
