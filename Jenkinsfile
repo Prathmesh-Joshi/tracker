@@ -136,7 +136,7 @@ spec:
                 container('dind') {
                     sh '''
                         echo "Logging in to Nexus Docker Registry..."
-                        docker login nexus.imcc.com \
+                        docker login http://nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085 \
                           -u student -p Imcc@2025
                     '''
                 }
