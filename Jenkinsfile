@@ -137,7 +137,7 @@ spec:
                     sh '''
                         echo "Logging in to Nexus Docker Registry..."
                         docker login nexus.imcc.com:8082 \
-                          -u admin -p Changeme@2025
+                          -u student -p Imcc@2025
                     '''
                 }
             }
@@ -197,3 +197,6 @@ spec:
         }
     }
 }
+
+
+
